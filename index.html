@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover pairs with the safe-area insets in style.css;
+         user-scalable=no because pinch belongs to the zoom worlds, not Safari. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light" />
+    <title>atlas-inf</title>
+    <meta
+      name="description"
+      content="An atlas of infinite, deterministic procedural worlds, generated in the browser."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f4f1e8'/%3E%3Cpath d='M3 22c4-7 7 2 11-4s6 3 15-6' fill='none' stroke='%231a2632' stroke-width='2'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      atlas-inf generates its worlds in the browser, so it needs JavaScript
+      enabled. The source is at
+      <a href="https://github.com/bhaviksoneji6/atlas-inf">github.com/bhaviksoneji6/atlas-inf</a>.
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
