@@ -23,6 +23,63 @@ function defaultDetail(): number {
   return window.innerWidth < 700 ? 0.5 : 1;
 }
 
+/**
+ * Upstream's paper: a 512px tile of warm noise, mirrored into quadrants so it
+ * repeats seamlessly, painted behind everything. Flat colour reads as a web
+ * page; this reads as paper, and it is most of why the original looks like a
+ * painting rather than a diagram.
+ *
+ * Reproduced from vendor/shan-shui-inf/index.html lines 4336-4360.
+ */
+function paperTexture(): string | null {
+  try {
+    return buildPaper();
+  } catch {
+    // Paper is decoration. A blocked canvas — privacy mode, a locked-down
+    // browser, a headless DOM — must cost the texture and nothing else. This
+    // threw inside the constructor once and took the whole page down with it,
+    // which is the same failure mode as the original start-up crash.
+    return null;
+  }
+}
+
+function buildPaper(): string | null {
+  const reso = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = reso;
+  canvas.height = reso;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const img = ctx.createImageData(reso, reso);
+  if (!img?.data) return null;
+  const noise = makeNoise(0x5a11a1);
+  const put = (x: number, y: number, r: number, g: number, b: number): void => {
+    const i = (y * reso + x) * 4;
+    img.data[i] = r;
+    img.data[i + 1] = g;
+    img.data[i + 2] = b;
+    img.data[i + 3] = 255;
+  };
+
+  for (let i = 0; i <= reso / 2; i++) {
+    for (let j = 0; j <= reso / 2; j++) {
+      let c = 245 + noise.noise2(i * 0.1, j * 0.1) * 10;
+      c -= Math.random() * 20;
+      const r = c;
+      const g = c * 0.95;
+      const b = c * 0.85;
+      // Mirror into all four quadrants so the tile has no visible seam.
+      put(i, j, r, g, b);
+      put(Math.min(reso - 1, reso - i), j, r, g, b);
+      put(i, Math.min(reso - 1, reso - j), r, g, b);
+      put(Math.min(reso - 1, reso - i), Math.min(reso - 1, reso - j), r, g, b);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
 function download(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -44,6 +101,11 @@ class Atlas {
   private lastView: View = { x: 0, y: 0, w: 1, h: 1, scale: 1 };
   private frameHandle = 0;
   private suppressHash = false;
+  /** World units an arrow press walks, as upstream's INC_STEP. */
+  private step = 200;
+  private glideHandle = 0;
+  private paper: string | null = null;
+  private autoHandle = 0;
 
   constructor(private root: HTMLElement) {
     const fallback: AtlasState = {
@@ -63,13 +125,14 @@ class Atlas {
     this.root.append(this.stage);
 
     this.shell = createShell(this.root, {
-      worlds,
       repoUrl: REPO_URL,
-      currentWorld: () => this.state.world,
       currentSeed: () => this.state.seed,
+      currentStep: () => this.step,
       currentDetail: () => this.state.detail ?? 1,
-      onWorld: (id) => this.setWorld(id),
       onSeed: (seed) => this.setSeed(seed),
+      onStep: (delta) => this.glideBy(delta),
+      onStepSize: (size) => (this.step = size),
+      onAutoScroll: (on) => this.setAutoScroll(on),
       onDetail: (detail) => this.setDetail(detail),
       onExportSvg: () => this.exportSvg(),
       onExportPng: () => void this.exportPng(),
@@ -110,7 +173,16 @@ class Atlas {
     this.renderer =
       this.world.renderer === 'canvas' ? new CanvasRenderer() : new SvgRenderer();
     this.stage.append(this.renderer.el);
-    document.body.style.background = this.world.background;
+
+    this.stage.style.backgroundColor = this.world.background;
+    document.body.style.backgroundColor = this.world.background;
+    // Generated once and reused; the SVG surface is transparent so it shows.
+    this.paper ??= paperTexture();
+    if (this.paper && this.world.renderer === 'svg') {
+      this.stage.style.backgroundImage = `url(${this.paper})`;
+    } else {
+      this.stage.style.backgroundImage = '';
+    }
 
     this.viewport = new Viewport({
       el: this.stage,
@@ -133,7 +205,7 @@ class Atlas {
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = requestAnimationFrame(() => {
       this.frameHandle = 0;
-      this.draw(view, settled);
+      this.draw(view);
     });
 
     if (settled) {
@@ -147,19 +219,23 @@ class Atlas {
     }
   }
 
-  private draw(view: View, settled: boolean): void {
+  private draw(view: View): void {
     const seed = hashString(this.state.seed);
     const noise = makeNoise(seed);
-    // Drop detail while a gesture is in flight, restore it once it settles —
-    // the cheapest way to keep panning responsive on a phone.
-    const detail = (this.state.detail ?? 1) * (settled ? 1 : 0.6);
+    // Detail comes from settings alone. It used to drop to 0.6 mid-gesture,
+    // which was a reasonable idea before tiles were cached and a bad one
+    // after: the detail is part of the cache key, so every pan re-generated
+    // every visible tile at a second resolution and then threw it away.
+    const detail = this.state.detail ?? 1;
 
     const tiles = visibleTiles(view, this.world);
     const geometry: Polyline[] = [];
+    const keys: string[] = [];
     let generated = 0;
 
     for (const tile of tiles) {
       const key = `${this.state.seed}/${this.world.id}/${tile.key}/${detail.toFixed(2)}`;
+      keys.push(key);
       const geo = this.cache.get(key, () => {
         generated++;
         const brushRng = rngAt(seed, tile.x, tile.y, tile.level);
@@ -180,23 +256,62 @@ class Atlas {
     }
 
     this.lastGeometry = geometry;
-    this.renderer.frame(view, geometry, this.world.background);
+    // The set of tiles on screen *is* the identity of the geometry, so a pan
+    // that does not cross a tile boundary need not rebuild anything.
+    this.renderer.frame(view, geometry, this.world.background, keys.join('|'));
 
     this.shell.setStatus(
       generated > 0 ? `${this.world.name} · ${geometry.length.toLocaleString()} paths` : '',
     );
   }
 
-  private setWorld(id: string): void {
-    if (id === this.state.world) return;
-    this.world = worldById(id);
-    this.state.world = id;
-    this.state.x = 0;
-    this.state.y = 0;
-    this.state.z = 0;
-    this.cache.clear();
-    this.mountWorld();
-    writeState(this.state, true);
+  /**
+   * Walk the scroll by `delta`, eased.
+   *
+   * Upstream's arrow jumps instantly; gliding reads better and costs nothing,
+   * because panning within a tile set no longer re-serialises anything. The
+   * seed is untouched — the arrow moves along the same infinite world rather
+   * than generating a new one.
+   */
+  private glideBy(delta: number): void {
+    this.setAutoScroll(false);
+    this.shell.clearAutoScroll();
+    cancelAnimationFrame(this.glideHandle);
+
+    const from = this.viewport.cx;
+    const to = from + delta;
+    const ms = 420;
+    const t0 = performance.now();
+    const ease = (t: number): number =>
+      t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+
+    const tick = (now: number): void => {
+      const t = Math.min(1, (now - t0) / ms);
+      this.viewport.setCenter(from + (to - from) * ease(t), this.viewport.cy, t >= 1);
+      if (t < 1) this.glideHandle = requestAnimationFrame(tick);
+    };
+    this.glideHandle = requestAnimationFrame(tick);
+  }
+
+  /** Upstream's auto-scroll checkbox: drift rightwards until told to stop. */
+  private setAutoScroll(on: boolean): void {
+    cancelAnimationFrame(this.autoHandle);
+    this.autoHandle = 0;
+    if (!on) {
+      // Commit the position we drifted to.
+      this.viewport.setCenter(this.viewport.cx, this.viewport.cy, true);
+      return;
+    }
+
+    let last = performance.now();
+    const tick = (now: number): void => {
+      const dt = Math.min(now - last, 100) / 1000;
+      last = now;
+      // Tied to the step size, so the one control governs both speed and jump.
+      this.viewport.setCenter(this.viewport.cx + this.step * dt * 0.5, this.viewport.cy, false);
+      this.autoHandle = requestAnimationFrame(tick);
+    };
+    this.autoHandle = requestAnimationFrame(tick);
   }
 
   private setSeed(seed: string): void {
@@ -205,14 +320,14 @@ class Atlas {
     this.state.seed = next;
     this.cache.clear();
     writeState(this.state, true);
-    this.draw(this.lastView, true);
+    this.draw(this.lastView);
   }
 
   private setDetail(detail: number): void {
     this.state.detail = detail;
     this.cache.clear();
     writeState(this.state);
-    this.draw(this.lastView, true);
+    this.draw(this.lastView);
   }
 
   private exportSvg(): void {

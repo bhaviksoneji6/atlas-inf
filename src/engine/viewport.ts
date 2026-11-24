@@ -74,6 +74,16 @@ export class Viewport {
     this.emit(true);
   }
 
+  /**
+   * Move the centre. `settled` false marks a frame of an ongoing motion —
+   * an arrow glide or auto-scroll — so the URL is not rewritten per frame.
+   */
+  setCenter(x: number, y: number, settled = true): void {
+    this.cx = x;
+    this.cy = y;
+    this.emit(settled);
+  }
+
   private readSize(): void {
     const r = this.el.getBoundingClientRect();
     this.width = Math.max(1, r.width);

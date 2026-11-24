@@ -34,6 +34,8 @@ export class SvgRenderer implements Renderer {
   readonly kind = 'svg' as const;
   readonly el: SVGSVGElement;
   private group: SVGGElement;
+  /** The geometry currently in the DOM, so panning need not rebuild it. */
+  private lastKey: string | undefined;
 
   constructor() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -48,12 +50,21 @@ export class SvgRenderer implements Renderer {
     this.el.setAttribute('height', String(h));
   }
 
-  frame(view: View, geometry: Polyline[], background: string): void {
-    this.el.style.background = background;
+  frame(view: View, geometry: Polyline[], background: string, key?: string): void {
+    // The background is the host element's, not the surface's, so the paper
+    // texture behind it shows through. `background` stays in the signature
+    // because the canvas renderer must clear with it.
+    void background;
+    // Panning is a viewBox change, nothing more. Serialising ~50k paths costs
+    // tens of megabytes of string per frame; upstream sidesteps the same
+    // problem by regenerating only at chunk boundaries and otherwise calling
+    // its `viewupdate`.
     this.el.setAttribute(
       'viewBox',
       `${view.x.toFixed(1)} ${view.y.toFixed(1)} ${view.w.toFixed(1)} ${view.h.toFixed(1)}`,
     );
+    if (key !== undefined && key === this.lastKey) return;
+    this.lastKey = key;
     this.group.innerHTML = serialize(geometry);
   }
 

@@ -19,6 +19,11 @@ function vhash(seed: number, x: number, y: number): number {
   return hashInts(seed, x, y) / 4294967296;
 }
 
+/** Hash a 3-D lattice point to [0, 1). */
+function vhash3(seed: number, x: number, y: number, z: number): number {
+  return hashInts(seed, x, y, z) / 4294967296;
+}
+
 /** Ken Perlin's smootherstep: zero 1st and 2nd derivatives at both ends. */
 function smootherstep(t: number): number {
   return t * t * t * (t * (t * 6 - 15) + 10);
@@ -31,6 +36,15 @@ function lerp(a: number, b: number, t: number): number {
 export interface Noise {
   /** Single-octave value noise in [0, 1). */
   noise2(x: number, y: number): number;
+  /**
+   * 3-D value noise in [0, 1).
+   *
+   * Upstream's p5-derived `Noise.noise` takes up to three arguments and the
+   * ported generators use all three in fourteen places — usually with the
+   * third as a per-instance offset, so two trees at the same coordinates do
+   * not come out identical. Folding z into x would make those collide.
+   */
+  noise3(x: number, y: number, z: number): number;
   /** 1-D convenience slice, for strokes and ridgelines. */
   noise1(x: number, row?: number): number;
   /**
@@ -57,6 +71,25 @@ export function makeNoise(seed: number): Noise {
     const v11 = vhash(seed, xi + 1, yi + 1);
 
     return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), ty);
+  }
+
+  function noise3(x: number, y: number, z: number): number {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const zi = Math.floor(z);
+    const tx = smootherstep(x - xi);
+    const ty = smootherstep(y - yi);
+    const tz = smootherstep(z - zi);
+
+    const c = (dx: number, dy: number, dz: number): number =>
+      vhash3(seed, xi + dx, yi + dy, zi + dz);
+
+    const x00 = lerp(c(0, 0, 0), c(1, 0, 0), tx);
+    const x10 = lerp(c(0, 1, 0), c(1, 1, 0), tx);
+    const x01 = lerp(c(0, 0, 1), c(1, 0, 1), tx);
+    const x11 = lerp(c(0, 1, 1), c(1, 1, 1), tx);
+
+    return lerp(lerp(x00, x10, ty), lerp(x01, x11, ty), tz);
   }
 
   function fbm(x: number, y: number, octaves = 4, lacunarity = 2, gain = 0.5): number {
@@ -100,6 +133,7 @@ export function makeNoise(seed: number): Noise {
 
   return {
     noise2,
+    noise3,
     noise1: (x, row = 0.5) => noise2(x, row),
     fbm,
     ridged,

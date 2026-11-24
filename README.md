@@ -15,10 +15,22 @@ See [NOTICE.md](NOTICE.md) for exactly what is ported and what is not.
 
 ## Worlds
 
-| World | Mode | Renderer | |
+**Shan Shui** — scroll, SVG. An endless Chinese landscape: mountains with
+inked rims and hatched slopes, flat-topped mesas carrying groves and rocks,
+pale ranges on the horizon, water below. A port of Lingdong Huang's drawing
+code onto this engine, so the scroll is identical every time you open a given
+seed and a link reproduces the exact view — which the original, seeding one
+sequential stream, could not do.
+
+Two worlds are **parked**: they still build and the smoke test still boots
+them, but they are out of the interface while Shan Shui is the focus.
+
+| Parked | Mode | Renderer | |
 | --- | --- | --- | --- |
-| **Topography** | zoom | canvas | An endless contour map. Zooming adds fBm octaves that were previously sub-pixel and halves the contour interval, so detail *appears* rather than magnifies. Peaks and rivers live on a fixed world lattice, so they stay put across zoom levels. |
-| **Ink Ridges** | scroll | SVG | Receding ridgelines in ink wash, scrolling sideways forever. Uses the ported brush primitives for what they were designed for. |
+| Topography | zoom | canvas | An endless contour map. Zooming adds fBm octaves that were previously sub-pixel and halves the contour interval, so detail *appears* rather than magnifies. Peaks and rivers live on a fixed world lattice, so they stay put across zoom levels. |
+| Ink Ridges | scroll | SVG | Receding ridgelines in ink wash. |
+
+Reach them with `#world=topo` or `#world=ridges`.
 
 ## How it works
 
@@ -103,18 +115,35 @@ from a Vercel-style deploy and are already handled:
 
 ## Controls
 
+The page follows the original's: two hairline boxes top-left — **☰** for the
+menu, **`</>`** for the source — and big **〈 〉** hit areas flanking the
+artwork that walk the scroll by the step size. The menu holds `SEED`, `VIEW`
+(step size), `Auto-scroll`, `DETAIL` and `SAVE`.
+
 | | |
 | --- | --- |
-| Drag / swipe | Pan |
-| Wheel / pinch | Zoom (zoom worlds only) |
+| 〈 〉 or drag/swipe | Walk the scroll |
+| Auto-scroll | Drift until you stop it; any arrow press or drag cancels it |
+| Wheel | Scroll (zoom, in the parked zoom world) |
 | Arrow keys | Pan; `+` / `-` zoom |
-| Esc | Close a panel |
+| Esc | Close the menu |
 
-Three buttons, top left: change world, settings, source. Seed, position and
-zoom live in the URL, so any view worth keeping is a link.
+The arrow does **not** reseed anything — it walks further along the same
+infinite world, exactly as upstream's does. Only `Generate` changes the seed,
+and unlike upstream it regenerates in place instead of reloading the page, so
+the URL stays a link to what you are looking at.
 
 ## Known rough edges
 
+- `Arch` (houses, pagodas, boats, transmission towers) and `Man` are not
+  ported yet, so the mountains carry no buildings and the boats the planner
+  places are skipped. `Mount` reaches them through an optional hook, so they
+  slot in without restructuring.
+- A screen of Shan Shui is 40,000–75,000 SVG paths depending on the seed.
+  That is roughly what the original costs too, and panning is cheap because
+  the renderer only re-serialises when the visible tile set changes — but the
+  first paint is not fast, and the headless smoke test spends most of its
+  minute parsing it.
 - Nothing checks what the output actually *looks* like. The smoke test proves
   the app draws; it cannot tell a landscape from a scribble.
 - Rivers stop at the first closed basin above the water line rather than

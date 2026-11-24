@@ -73,6 +73,13 @@ export interface World {
    * its 512-wide chunks over an 800-tall scroll.
    */
   bandHeight?: number;
+  /**
+   * How many extra tiles to keep either side of the viewport. The default of
+   * one suits worlds whose features stay inside the tile that planted them;
+   * raise it where a feature can extend well past its own chunk, or it will
+   * only appear once its origin scrolls into view.
+   */
+  tileMargin?: number;
   /** Starting pixels-per-world-unit. */
   initialScale: number;
   generate(ctx: GenContext): Polyline[];
@@ -83,6 +90,12 @@ export interface Renderer {
   /** `Element`, not `HTMLElement`: the SVG renderer's root is an SVGSVGElement. */
   readonly el: Element;
   resize(w: number, h: number): void;
-  frame(view: View, geometry: Polyline[], background: string): void;
+  /**
+   * `key` identifies the geometry. When it is unchanged from the previous
+   * frame a renderer may move the view without rebuilding anything — which is
+   * the difference between a scroll world being usable and not, once a screen
+   * holds tens of thousands of paths.
+   */
+  frame(view: View, geometry: Polyline[], background: string, key?: string): void;
   destroy(): void;
 }

@@ -15,25 +15,50 @@ licence text, so the terms travel with the code they cover.
 
 ### What is ported
 
-The ink-brush drawing primitives in [`src/engine/brush.ts`](src/engine/brush.ts)
-are adapted closely from the corresponding functions in the upstream
-`index.html`:
+Substantially more than when this file was first written. The Shan Shui world
+is a port of upstream's drawing code, not merely inspired by it.
 
-| atlas-inf        | upstream              |
-| ---------------- | --------------------- |
-| `poly`           | `poly` (line 485)     |
-| `stroke`         | `stroke` (line 516)   |
-| `blob`           | `blob` (line 578)     |
-| `div`            | `div` (line 627)      |
-| `texture`        | `texture` (line 653)  |
-| `bezmh`          | `bezmh` (line 445)    |
-| `loopNoise`      | `loopNoise` (line 404)|
+**Drawing primitives** — [`src/engine/brush.ts`](src/engine/brush.ts):
 
-The *technique* used by the world planners — sample a noise field, keep its
-local maxima as feature sites, reject sites that fall within a minimum
-distance of an existing one, and record occupancy so later passes fill the
-gaps — is also taken from upstream's `mountplanner` (line 3706). The planners
-themselves are original.
+| atlas-inf   | upstream             |
+| ----------- | -------------------- |
+| `poly`      | `poly` (line 485)    |
+| `stroke`    | `stroke` (line 516)  |
+| `blob`      | `blob` (line 578)    |
+| `div`       | `div` (line 627)     |
+| `texture`   | `texture` (line 653) |
+| `bezmh`     | `bezmh` (line 445)   |
+| `loopNoise` | `loopNoise` (line 404) |
+
+**Helpers** — [`src/engine/math.ts`](src/engine/math.ts) (`mapval`, `distance`,
+`wtrand`, `randGaussian`, lines 395-443) and
+[`src/engine/poly-tools.ts`](src/engine/poly-tools.ts) (`midPt`, `triangulate`,
+lines 207-382).
+
+**The Shan Shui world** — [`src/worlds/shanshui/`](src/worlds/shanshui/):
+
+| atlas-inf          | upstream                        |
+| ------------------ | ------------------------------- |
+| `tree.ts`          | `Tree`, all eight generators plus the shared `branch` / `twig` / `barkify` (lines 743-1725) |
+| `mount.ts`         | `Mount` — `foot`, `mountain`, `flatMount`, `flatDec`, `distMount`, `rock` (lines 1727-2523) |
+| `water.ts`         | `water` (lines 3667-3704)       |
+| `planner.ts`       | `mountplanner` (lines 3706-3814) |
+
+The paper texture in [`src/main.ts`](src/main.ts) reproduces upstream's
+background canvas (lines 4336-4360), and the page chrome in
+[`src/ui/shell.ts`](src/ui/shell.ts) follows its layout: a ☰ menu box, a `</>`
+source box, `<pre>`-labelled controls and the flanking 〈 〉 arrows.
+
+`Arch` (houses, pagodas, boats, transmission towers) and `Man` are **not yet
+ported**. `Mount` calls into `Arch` in five places; those go through an
+optional hook in `mount.ts`, so the mountains currently carry no buildings.
+
+### What is original
+
+The engine: coordinate-seeded randomness, the noise field, the tile cache and
+strip/quadtree indexes, the viewport, the renderers and the typed geometry
+model. Also the two parked worlds, Topography and Ink Ridges, and the
+decisions listed under *Other things that changed* below.
 
 ### What is deliberately **not** carried over
 

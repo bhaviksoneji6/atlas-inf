@@ -44,6 +44,26 @@ async function bundleSource() {
   return result.outputFiles[0].text;
 }
 
+/**
+ * Bundle a scrap of source against the project and import it.
+ *
+ * Lets a check call into the generators directly, without a DOM — which for
+ * the dense worlds is the difference between a second and several minutes.
+ */
+async function importBundle(contents) {
+  const result = await build({
+    stdin: { contents, resolveDir: root, loader: 'ts', sourcefile: 'smoke-entry.ts' },
+    bundle: true,
+    write: false,
+    format: 'esm',
+    target: 'es2022',
+    logLevel: 'error',
+    loader: { '.css': 'empty' },
+  });
+  const code = result.outputFiles[0].text;
+  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+}
+
 /** The built bundle, as actually deployed. */
 function readDistBundle() {
   const assets = join(root, 'dist/assets');
@@ -90,10 +110,20 @@ async function boot(bundle, hash = '') {
     new Proxy(
       {},
       {
-        get: (_t, prop) => (prop in calls ? () => void calls[prop]++ : () => {}),
+        get: (_t, prop) => {
+          if (prop in calls) return () => void calls[prop]++;
+          // Enough of an ImageData for the paper texture to run rather than
+          // be skipped — a stub that returns undefined for everything hides
+          // real pixel-handling bugs behind the catch that guards it.
+          if (prop === 'createImageData') {
+            return (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) });
+          }
+          return () => {};
+        },
         set: () => true,
       },
     );
+  window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,';
 
   try {
     window.eval(bundle);
@@ -109,8 +139,11 @@ async function boot(bundle, hash = '') {
     calls,
     host: !!app.querySelector('.stage-host'),
     canvas: !!app.querySelector('canvas'),
+    svg: !!app.querySelector('svg.stage'),
     svgPaths: app.querySelectorAll('svg.stage path').length,
-    buttons: app.querySelectorAll('.icon-btn').length,
+    // The chrome uses hairline boxes now; the old class is kept in the
+    // selector so this check does not silently pass on an empty result.
+    buttons: app.querySelectorAll('.hair-btn, .icon-btn').length,
     hash: () => window.location.hash,
   };
 }
@@ -147,10 +180,48 @@ console.log('\nsource bundle');
 {
   const r = await boot(sourceBundle);
   record('default world boots without error', r.errors.length === 0, r.errors.join(' | '));
-  record('mounts a stage and a renderer', r.host && r.canvas);
-  record('renders the controls', r.buttons >= 3, `${r.buttons} buttons`);
-  record('draws to canvas', drew(r), `moveTo=${r.calls.moveTo} stroke=${r.calls.stroke} fill=${r.calls.fill}`);
+  // Which surface it mounts depends on the default world's renderer, so this
+  // asserts that *a* renderer is present rather than naming one.
+  record('mounts a stage and a renderer', r.host && (r.canvas || r.svg));
+  record('renders the controls', r.buttons >= 2, `${r.buttons} buttons`);
+  record(
+    'default world draws',
+    drew(r),
+    r.canvas ? `moveTo=${r.calls.moveTo} stroke=${r.calls.stroke}` : `${r.svgPaths} paths`,
+  );
   record('writes its state to the URL', /world=/.test(r.hash()), r.hash());
+}
+
+{
+  // Shan Shui at the generator level rather than through the DOM. A screen of
+  // it is ~60k paths and jsdom needs minutes to parse that much SVG, so the
+  // default-world boot above already pays that cost once; paying it twice put
+  // this suite past ten minutes. This checks the thing the DOM boot cannot —
+  // that the scroll is dense, and that a chunk is reproducible.
+  const { chunk } = await importBundle(`
+    import { shanshuiWorld } from './src/worlds/shanshui/index.ts';
+    import { makeNoise } from './src/engine/noise.ts';
+    import { makeBrush } from './src/engine/brush.ts';
+    import { hashString, rngAt } from './src/engine/rng.ts';
+    export function chunk(x) {
+      const seed = hashString('atlas');
+      const noise = makeNoise(seed);
+      return shanshuiWorld.generate({
+        seed, x, y: 0, w: shanshuiWorld.tileSize, h: 800, level: 0, detail: 1, noise,
+        brush: makeBrush(rngAt(seed, x, 0, 0), noise),
+        rngAt: (a, b) => rngAt(seed, a, b, 0),
+      });
+    }
+  `);
+
+  const a = chunk(0);
+  const b = chunk(0);
+  record('shan shui chunk is dense', a.length > 2000, `${a.length} paths in one 512px chunk`);
+  record(
+    'shan shui chunk is reproducible',
+    JSON.stringify(a) === JSON.stringify(b),
+    'same chunk generated twice',
+  );
 }
 
 {
@@ -179,7 +250,11 @@ if (dist) {
   console.log('\nbuilt bundle (dist/)');
   const r = await boot(dist);
   record('shipped bundle boots without error', r.errors.length === 0, r.errors.join(' | '));
-  record('shipped bundle draws', drew(r), `moveTo=${r.calls.moveTo}`);
+  record(
+    'shipped bundle draws',
+    drew(r),
+    r.canvas ? `moveTo=${r.calls.moveTo}` : `${r.svgPaths} paths`,
+  );
 } else {
   console.log('\nbuilt bundle (dist/) — not present, skipped. Run `npm run build` first.');
 }

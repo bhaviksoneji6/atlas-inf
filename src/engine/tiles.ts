@@ -75,8 +75,9 @@ export function visibleTiles(view: View, world: World, maxLevel = 12): Tile[] {
   if (world.mode === 'scroll') {
     const w = world.tileSize;
     const h = world.bandHeight ?? world.tileSize;
-    const i0 = Math.floor(view.x / w) - 1;
-    const i1 = Math.ceil((view.x + view.w) / w) + 1;
+    const m = world.tileMargin ?? 1;
+    const i0 = Math.floor(view.x / w) - m;
+    const i1 = Math.ceil((view.x + view.w) / w) + m;
     for (let ix = i0; ix <= i1; ix++) {
       tiles.push({ key: `0/${ix}/0`, level: 0, ix, iy: 0, x: ix * w, y: 0, w, h });
     }
