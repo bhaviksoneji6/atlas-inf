@@ -53,7 +53,12 @@ export class Viewport {
 
     this.ro = new ResizeObserver(() => this.measure());
     this.ro.observe(this.el);
-    this.measure();
+
+    // Measure, but do NOT emit yet. The owner is still inside
+    // `this.viewport = new Viewport(...)`, so any callback fired from here
+    // reaches a half-constructed object. The first emit is the owner's to
+    // trigger, once it holds the reference — see `setFromState`.
+    this.readSize();
   }
 
   get view(): View {
@@ -69,10 +74,14 @@ export class Viewport {
     this.emit(true);
   }
 
-  private measure(): void {
+  private readSize(): void {
     const r = this.el.getBoundingClientRect();
     this.width = Math.max(1, r.width);
     this.height = Math.max(1, r.height);
+  }
+
+  private measure(): void {
+    this.readSize();
     this.emit(true);
   }
 

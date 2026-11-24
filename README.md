@@ -6,9 +6,8 @@ An atlas of infinite, deterministic procedural worlds, generated in the
 browser. Every view is a pure function of a seed and a coordinate, so a URL is
 enough to reconstruct exactly what someone else was looking at.
 
-> **Status: early.** The deployed page currently fails to render — a crash
-> during start-up, tracked in [Known rough edges](#known-rough-edges). The
-> generators and the build are sound; the browser entry point is not.
+> **Status: early.** Two worlds, and the art direction is a long way behind
+> the engine. See [Known rough edges](#known-rough-edges).
 
 Inspired by, and partly derived from,
 [shan-shui-inf](https://github.com/LingDong-/shan-shui-inf) by Lingdong Huang.
@@ -97,15 +96,10 @@ zoom live in the URL, so any view worth keeping is a link.
 
 ## Known rough edges
 
-- **The page does not render.** `Atlas.mountWorld` assigns
-  `this.viewport = new Viewport(…)`, but `Viewport`'s constructor calls
-  `measure()` synchronously, which fires `onChange` → `onView` →
-  `this.renderer.resize(this.viewport.width, …)` while `this.viewport` is
-  still undefined. It throws inside the constructor and the app never starts.
-  The shell is built first, so the three buttons appear over a blank stage.
-- Nothing catches that class of failure. The build, the typecheck and the
-  deploy all pass while the page is dead; a smoke test running the real
-  bundle against a headless DOM would have caught it.
+- **There is no boot test.** The first deploy shipped a page that threw
+  during start-up and rendered nothing, while the typecheck, the build and
+  the deploy all passed — none of them ever runs the app. Loading the bundle
+  into a headless DOM and asserting that it draws would close the gap.
 - Rivers stop at the first closed basin above the water line rather than
   filling it and spilling onward. Correct for a noise field, but real
   hydrology would carve through.

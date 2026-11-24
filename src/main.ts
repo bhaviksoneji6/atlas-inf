@@ -122,7 +122,12 @@ class Atlas {
 
   private onView(view: View, settled: boolean): void {
     this.lastView = view;
-    this.renderer.resize(this.viewport.width, this.viewport.height);
+    // Everything here comes off `view`, never off `this.viewport`. The view
+    // already carries its own pixel size (w * scale) and centre, and reaching
+    // back through the field made this method depend on the viewport
+    // reference being assigned — which is exactly what crashed the app on
+    // start-up, since the first emit arrived mid-assignment.
+    this.renderer.resize(view.w * view.scale, view.h * view.scale);
 
     // Coalesce to one render per frame: pointermove fires far more often.
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
@@ -132,8 +137,8 @@ class Atlas {
     });
 
     if (settled) {
-      this.state.x = this.viewport.cx;
-      this.state.y = this.viewport.cy;
+      this.state.x = view.x + view.w / 2;
+      this.state.y = view.y + view.h / 2;
       this.state.z = this.zFromScale(view.scale);
       this.suppressHash = true;
       writeState(this.state);
