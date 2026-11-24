@@ -1,8 +1,14 @@
 # atlas-inf
 
+**→ [bhaviksoneji6.github.io/atlas-inf](https://bhaviksoneji6.github.io/atlas-inf/)**
+
 An atlas of infinite, deterministic procedural worlds, generated in the
 browser. Every view is a pure function of a seed and a coordinate, so a URL is
 enough to reconstruct exactly what someone else was looking at.
+
+> **Status: early.** The deployed page currently fails to render — a crash
+> during start-up, tracked in [Known rough edges](#known-rough-edges). The
+> generators and the build are sound; the browser entry point is not.
 
 Inspired by, and partly derived from,
 [shan-shui-inf](https://github.com/LingDong-/shan-shui-inf) by Lingdong Huang.
@@ -59,6 +65,8 @@ npm run preview    # serve the built output
 
 ## Deploying to GitHub Pages
 
+Live at **https://bhaviksoneji6.github.io/atlas-inf/**.
+
 Pushing to `main` builds and deploys via
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). One manual step
 first, once per repository:
@@ -89,6 +97,15 @@ zoom live in the URL, so any view worth keeping is a link.
 
 ## Known rough edges
 
+- **The page does not render.** `Atlas.mountWorld` assigns
+  `this.viewport = new Viewport(…)`, but `Viewport`'s constructor calls
+  `measure()` synchronously, which fires `onChange` → `onView` →
+  `this.renderer.resize(this.viewport.width, …)` while `this.viewport` is
+  still undefined. It throws inside the constructor and the app never starts.
+  The shell is built first, so the three buttons appear over a blank stage.
+- Nothing catches that class of failure. The build, the typecheck and the
+  deploy all pass while the page is dead; a smoke test running the real
+  bundle against a headless DOM would have caught it.
 - Rivers stop at the first closed basin above the water line rather than
   filling it and spilling onward. Correct for a noise field, but real
   hydrology would carve through.
