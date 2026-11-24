@@ -30,6 +30,12 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      # Boots the app against a headless DOM and asserts that it draws.
+      # Runs after the build so it checks dist/ as well as the source — the
+      # first deploy shipped a page that threw on start-up while the build
+      # and the deploy both went green.
+      - run: npm run smoke
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

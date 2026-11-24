@@ -60,7 +60,26 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the built output
+npm run smoke      # boot the app headlessly and assert that it draws
+npm test           # typecheck + smoke
 ```
+
+### The smoke test
+
+[`scripts/smoke.mjs`](scripts/smoke.mjs) bundles the real entry point, boots it
+in a headless DOM with the handful of stubs jsdom lacks (`ResizeObserver`, a
+canvas 2-D context, element geometry, pointer capture) and asserts that the app
+starts, mounts a renderer, draws, writes its state to the URL, and survives a
+drag. If `dist/` exists it checks the built bundle too, so CI exercises the
+artifact that actually ships.
+
+It exists because the first deploy shipped a page that threw during start-up
+and rendered nothing, while the typecheck, the build and the deploy all passed
+— none of them ever ran the app. Reverting that fix makes 9 of the 13 checks
+fail, which is the only reason to trust them.
+
+It is **not** a rendering test. jsdom has no pixels, so it proves the app runs
+and issues the right drawing calls, not that the output looks right.
 
 ## Deploying to GitHub Pages
 
@@ -96,10 +115,8 @@ zoom live in the URL, so any view worth keeping is a link.
 
 ## Known rough edges
 
-- **There is no boot test.** The first deploy shipped a page that threw
-  during start-up and rendered nothing, while the typecheck, the build and
-  the deploy all passed — none of them ever runs the app. Loading the bundle
-  into a headless DOM and asserting that it draws would close the gap.
+- Nothing checks what the output actually *looks* like. The smoke test proves
+  the app draws; it cannot tell a landscape from a scribble.
 - Rivers stop at the first closed basin above the water line rather than
   filling it and spilling onward. Correct for a noise field, but real
   hydrology would carve through.
